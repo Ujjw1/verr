@@ -141,6 +141,11 @@ export class StudentStoreWriteError extends Error {
   }
 }
 
+function isVercelServerlessDeploy(): boolean {
+  const env = process.env.VERCEL_ENV;
+  return env === "production" || env === "preview";
+}
+
 async function writeStore(students: StudentEquivalency[]): Promise<void> {
   const payload = JSON.stringify(students, null, 2);
   const redis = getRedis();
@@ -154,6 +159,12 @@ async function writeStore(students: StudentEquivalency[]): Promise<void> {
       );
     }
     return;
+  }
+
+  if (isVercelServerlessDeploy()) {
+    throw new StudentStoreWriteError(
+      "Redis is not configured on the server. In Vercel: Project → Settings → Environment Variables, add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN (copy from Upstash or .env.local), enable them for Production and Preview, then redeploy. .env.local is not uploaded with your git push."
+    );
   }
 
   try {
