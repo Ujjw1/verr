@@ -193,6 +193,27 @@ export class StudentStoreLimitError extends Error {
   }
 }
 
+export class StudentIssueNoConflictError extends Error {
+  constructor(readonly issueNo: string) {
+    super(
+      `Issue number "${issueNo}" is already used by another record. Choose a different number.`
+    );
+    this.name = "StudentIssueNoConflictError";
+  }
+}
+
+export class StudentUpdateNotFoundError extends Error {
+  constructor(readonly issueNo: string) {
+    super(`No saved record found for issue number "${issueNo}".`);
+    this.name = "StudentUpdateNotFoundError";
+  }
+}
+
+export type UpsertStudentOptions = {
+  /** When set, update the record that had this issue number (allows renaming issueNo). */
+  previousIssueNo?: string;
+};
+
 export async function listStudents(): Promise<StudentEquivalency[]> {
   const students = await readStore();
   return students.map((s) => ({ ...s })).sort((a, b) => {
@@ -239,7 +260,8 @@ export async function getNextIssueNo(): Promise<string> {
 }
 
 export async function upsertStudent(
-  record: StudentEquivalency
+  record: StudentEquivalency,
+  options?: UpsertStudentOptions
 ): Promise<StudentEquivalency> {
   const students = await readStore();
   const normalized: StudentEquivalency = {
@@ -251,6 +273,26 @@ export async function upsertStudent(
     programName: record.programName.trim(),
     programDuration: record.programDuration.trim(),
   };
+
+  const prev = options?.previousIssueNo?.trim();
+  if (prev) {
+    const idx = students.findIndex((s) => s.issueNo === prev);
+    if (idx < 0) {
+      throw new StudentUpdateNotFoundError(prev);
+    }
+    if (normalized.issueNo !== prev) {
+      const taken = students.some(
+        (s, i) => i !== idx && s.issueNo === normalized.issueNo
+      );
+      if (taken) {
+        throw new StudentIssueNoConflictError(normalized.issueNo);
+      }
+    }
+    students[idx] = normalized;
+    await writeStore(students);
+    return { ...normalized };
+  }
+
   const idx = students.findIndex((s) => s.issueNo === normalized.issueNo);
   if (idx >= 0) {
     students[idx] = normalized;

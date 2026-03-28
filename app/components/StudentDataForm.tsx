@@ -20,7 +20,9 @@ export function StudentDataForm({
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(initialStudent);
-  const issueNo = initialStudent?.issueNo ?? "";
+  const [issueNoInput, setIssueNoInput] = useState(
+    () => initialStudent?.issueNo ?? ""
+  );
   const [studentName, setStudentName] = useState(
     () => initialStudent?.studentName ?? ""
   );
@@ -41,13 +43,16 @@ export function StudentDataForm({
 
   const summaryUrlForQr = useMemo(() => {
     if (typeof window === "undefined") return null;
-    if (!showQrBanner || !initialStudent?.issueNo?.trim()) return null;
+    if (!showQrBanner) return null;
+    const id = (isEdit ? issueNoInput : initialStudent?.issueNo ?? "").trim();
+    if (!id) return null;
     const url = new URL("/", window.location.origin);
-    url.searchParams.set("issue", initialStudent.issueNo.trim());
+    url.searchParams.set("issue", id);
     return url.toString();
-  }, [showQrBanner, initialStudent?.issueNo]);
+  }, [showQrBanner, isEdit, issueNoInput, initialStudent?.issueNo]);
 
   useEffect(() => {
+    setIssueNoInput(initialStudent?.issueNo ?? "");
     setStudentName(initialStudent?.studentName ?? "");
     setRecognizedEquivalency(initialStudent?.recognizedEquivalency ?? "");
     setUniversityBoard(initialStudent?.universityBoard ?? "");
@@ -66,8 +71,18 @@ export function StudentDataForm({
       programName,
       programDuration,
     };
-    if (isEdit && issueNo.trim()) {
-      body.issueNo = issueNo.trim();
+    if (isEdit) {
+      const next = issueNoInput.trim();
+      if (!next) {
+        setStatus("error");
+        setErrorMessage("Issue number is required.");
+        return;
+      }
+      body.issueNo = next;
+      const original = initialStudent?.issueNo?.trim();
+      if (original) {
+        body.previousIssueNo = original;
+      }
     }
     const res = await fetch("/api/students", {
       method: "POST",
@@ -83,7 +98,7 @@ export function StudentDataForm({
       return;
     }
     const data = (await res.json()) as StudentEquivalency;
-    const issue = data.issueNo?.trim() ?? issueNo.trim();
+    const issue = data.issueNo?.trim() ?? issueNoInput.trim();
     setStatus("idle");
     if (issue) {
       router.replace(
@@ -93,7 +108,7 @@ export function StudentDataForm({
   }
 
   function dismissQrBanner() {
-    const id = initialStudent?.issueNo?.trim();
+    const id = (isEdit ? issueNoInput : initialStudent?.issueNo)?.trim();
     if (id) {
       router.replace(`/form?issue=${encodeURIComponent(id)}`);
     } else {
@@ -111,7 +126,7 @@ export function StudentDataForm({
       </h4>
       <p className="text-left text-xs text-gray-600">
         {isEdit
-          ? "Updating this issue number’s record."
+          ? "You can change the issue number here; it must stay unique among saved records."
           : "A new issue number is assigned automatically when you save (next available is shown below)."}
       </p>
 
@@ -123,10 +138,12 @@ export function StudentDataForm({
           {isEdit ? (
             <input
               name="issueNo"
-              value={issueNo}
-              readOnly
-              aria-readonly="true"
-              className="w-full cursor-default rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-800"
+              value={issueNoInput}
+              onChange={(e) => setIssueNoInput(e.target.value)}
+              type="text"
+              required
+              autoComplete="off"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 shadow-sm outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-300"
             />
           ) : (
             <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-2 text-sm text-gray-800">
