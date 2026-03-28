@@ -3,6 +3,7 @@ import type { StudentEquivalency } from "@/lib/students";
 import {
   getNextIssueNo,
   StudentStoreLimitError,
+  StudentStoreWriteError,
   upsertStudent,
 } from "@/lib/students";
 
@@ -56,6 +57,11 @@ export async function POST(request: Request) {
     if (e instanceof StudentStoreLimitError) {
       return NextResponse.json({ error: e.message }, { status: 403 });
     }
-    throw e;
+    if (e instanceof StudentStoreWriteError) {
+      return NextResponse.json({ error: e.message }, { status: 503 });
+    }
+    const message =
+      e instanceof Error && e.message ? e.message : "Could not save student data";
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 }

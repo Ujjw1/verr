@@ -27,12 +27,12 @@ export default async function Page({ searchParams }: PageProps) {
               Curriculum Development and Equivalence Division
             </h2>
             <p className="mt-1 text-sm">Sanothimi, Bhaktapur</p>
+
+            <h3 className="mt-4 font-semibold text-base">
+              Student Equivalency Summary
+            </h3>
           </div>
         </div>
-
-        <h3 className="mt-4  text-center font-semibold text-base">
-          Student Equivalency Summary
-        </h3>
       </div>
 
       {/* Content */}

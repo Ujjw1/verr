@@ -99,7 +99,7 @@ export function StudentDataForm({
       </h4>
       <p className="text-left text-xs text-gray-600">
         {isEdit
-          ? "Updating this issue number’s record. Data is kept in memory until the server restarts."
+          ? "Updating this issue number’s record."
           : "A new issue number is assigned automatically when you save (next available is shown below)."}
       </p>
 

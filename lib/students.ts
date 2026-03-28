@@ -1,4 +1,5 @@
 import "server-only";
+import { Redis } from "@upstash/redis";
 import fs from "fs/promises";
 import path from "path";
 
@@ -16,6 +17,43 @@ export const MAX_STUDENTS = 5;
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "students.json");
+
+/** Redis key for serverless / read-only filesystem hosts (Vercel, etc.). */
+const REDIS_KEY = "students:equivalency";
+
+function redisRestUrl(): string | undefined {
+  return (
+    process.env.UPSTASH_REDIS_REST_URL?.trim() ||
+    process.env.KV_REST_API_URL?.trim() ||
+    undefined
+  );
+}
+
+function redisRestToken(): string | undefined {
+  return (
+    process.env.UPSTASH_REDIS_REST_TOKEN?.trim() ||
+    process.env.KV_REST_API_TOKEN?.trim() ||
+    undefined
+  );
+}
+
+let redisSingleton: Redis | null | undefined;
+
+function getRedis(): Redis | null {
+  if (redisSingleton !== undefined) return redisSingleton;
+  const url = redisRestUrl();
+  const token = redisRestToken();
+  if (!url || !token) {
+    redisSingleton = null;
+    return null;
+  }
+  try {
+    redisSingleton = new Redis({ url, token });
+  } catch {
+    redisSingleton = null;
+  }
+  return redisSingleton;
+}
 
 const seed: StudentEquivalency[] = [
   {
@@ -60,25 +98,81 @@ function parseStudent(x: unknown): StudentEquivalency | null {
   };
 }
 
+function normalizeList(data: unknown): StudentEquivalency[] {
+  if (!Array.isArray(data)) return cloneSeed();
+  const out: StudentEquivalency[] = [];
+  for (const item of data) {
+    const s = parseStudent(item);
+    if (s) out.push(s);
+  }
+  return out.length > 0 ? out : cloneSeed();
+}
+
 async function readStore(): Promise<StudentEquivalency[]> {
+  const redis = getRedis();
+  if (redis) {
+    try {
+      const raw = await redis.get<string>(REDIS_KEY);
+      if (raw == null || raw === "") return cloneSeed();
+      const parsed =
+        typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
+      return normalizeList(parsed);
+    } catch {
+      return cloneSeed();
+    }
+  }
+
   try {
     const raw = await fs.readFile(DATA_FILE, "utf8");
     const data = JSON.parse(raw) as unknown;
-    if (!Array.isArray(data)) return cloneSeed();
-    const out: StudentEquivalency[] = [];
-    for (const item of data) {
-      const s = parseStudent(item);
-      if (s) out.push(s);
-    }
-    return out.length > 0 ? out : cloneSeed();
+    return normalizeList(data);
   } catch {
     return cloneSeed();
   }
 }
 
+export class StudentStoreWriteError extends Error {
+  constructor(
+    message: string,
+    readonly cause?: unknown
+  ) {
+    super(message);
+    this.name = "StudentStoreWriteError";
+  }
+}
+
 async function writeStore(students: StudentEquivalency[]): Promise<void> {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  await fs.writeFile(DATA_FILE, JSON.stringify(students, null, 2), "utf8");
+  const payload = JSON.stringify(students, null, 2);
+  const redis = getRedis();
+  if (redis) {
+    try {
+      await redis.set(REDIS_KEY, payload);
+    } catch (e) {
+      throw new StudentStoreWriteError(
+        "Could not save to Redis. Check UPSTASH / KV environment variables.",
+        e
+      );
+    }
+    return;
+  }
+
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(DATA_FILE, payload, "utf8");
+  } catch (e) {
+    const code =
+      e && typeof e === "object" && "code" in e
+        ? String((e as NodeJS.ErrnoException).code)
+        : "";
+    const hint =
+      code === "EROFS" || code === "EACCES" || code === "EPERM"
+        ? " The server filesystem is read-only (typical on Vercel). Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN (or Vercel KV: KV_REST_API_URL and KV_REST_API_TOKEN)."
+        : " For production, configure Upstash Redis or Vercel KV.";
+    throw new StudentStoreWriteError(
+      `Could not write student data to disk.${hint}`,
+      e
+    );
+  }
 }
 
 export class StudentStoreLimitError extends Error {
