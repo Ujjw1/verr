@@ -1,13 +1,15 @@
+import { StudentSummaryQr } from "@/app/components/StudentSummaryQr";
 import { getStudentByIssueNo } from "@/lib/students";
 
 type PageProps = {
-  searchParams: Promise<{ issue?: string }>;
+  searchParams: Promise<{ issue?: string; qr?: string }>;
 };
 
 export default async function Page({ searchParams }: PageProps) {
-  const { issue } = await searchParams;
+  const { issue, qr } = await searchParams;
   const issueNo = issue?.trim() ?? "";
   const student = issueNo ? await getStudentByIssueNo(issueNo) : null;
+  const showQr = qr === "1" && Boolean(student);
 
   return (
     <div className="min-h-screen w-full bg-white  text-gray-900 px-3 py-6 sm:px-4 sm:py-10 md:px-6">
@@ -96,6 +98,8 @@ export default async function Page({ searchParams }: PageProps) {
                   {student.programDuration}
                 </p>
               </div>
+
+              {showQr ? <StudentSummaryQr issueNo={student.issueNo} /> : null}
             </>
           )
         ) : null}

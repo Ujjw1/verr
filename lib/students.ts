@@ -193,6 +193,16 @@ export class StudentStoreLimitError extends Error {
   }
 }
 
+export async function listStudents(): Promise<StudentEquivalency[]> {
+  const students = await readStore();
+  return students.map((s) => ({ ...s })).sort((a, b) => {
+    const na = /^\d+$/.test(a.issueNo) ? Number(a.issueNo) : 0;
+    const nb = /^\d+$/.test(b.issueNo) ? Number(b.issueNo) : 0;
+    if (na !== nb) return nb - na;
+    return a.issueNo.localeCompare(b.issueNo);
+  });
+}
+
 export async function getStudentByIssueNo(
   issueNo: string
 ): Promise<StudentEquivalency | null> {
@@ -200,6 +210,15 @@ export async function getStudentByIssueNo(
   const normalized = issueNo.trim();
   const found = students.find((s) => s.issueNo === normalized);
   return found ? { ...found } : null;
+}
+
+export async function deleteStudent(issueNo: string): Promise<boolean> {
+  const students = await readStore();
+  const normalized = issueNo.trim();
+  const next = students.filter((s) => s.issueNo !== normalized);
+  if (next.length === students.length) return false;
+  await writeStore(next);
+  return true;
 }
 
 /** Next issue number: max existing numeric id + 1, or `{year}0001` if none. */

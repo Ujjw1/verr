@@ -2,10 +2,22 @@ import { NextResponse } from "next/server";
 import type { StudentEquivalency } from "@/lib/students";
 import {
   getNextIssueNo,
+  listStudents,
   StudentStoreLimitError,
   StudentStoreWriteError,
   upsertStudent,
 } from "@/lib/students";
+
+export async function GET() {
+  try {
+    const students = await listStudents();
+    return NextResponse.json(students);
+  } catch (e) {
+    const message =
+      e instanceof Error && e.message ? e.message : "Could not load students";
+    return NextResponse.json({ error: message }, { status: 503 });
+  }
+}
 
 function parseBody(body: unknown): Omit<StudentEquivalency, "issueNo"> & {
   issueNo?: string;

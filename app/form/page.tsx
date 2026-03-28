@@ -1,16 +1,23 @@
 import Link from "next/link";
 import { StudentDataForm } from "@/app/components/StudentDataForm";
-import { getNextIssueNo, getStudentByIssueNo } from "@/lib/students";
+import { StudentRecordsList } from "@/app/components/StudentRecordsList";
+import {
+  getNextIssueNo,
+  getStudentByIssueNo,
+  listStudents,
+} from "@/lib/students";
 
 type PageProps = {
-  searchParams: Promise<{ issue?: string }>;
+  searchParams: Promise<{ issue?: string; qr?: string }>;
 };
 
 export default async function FormPage({ searchParams }: PageProps) {
-  const { issue } = await searchParams;
+  const { issue, qr } = await searchParams;
   const issueNo = issue?.trim() ?? "";
   const student = issueNo ? await getStudentByIssueNo(issueNo) : null;
   const nextIssuePreview = await getNextIssueNo();
+  const allStudents = await listStudents();
+  const showQrBanner = qr === "1" && Boolean(student);
 
   return (
     <div className="min-h-screen bg-gray-200 flex justify-center items-start px-3 py-6 sm:px-4 sm:py-10">
@@ -48,9 +55,12 @@ export default async function FormPage({ searchParams }: PageProps) {
           </Link>
         </p>
 
+        <StudentRecordsList students={allStudents} />
+
         <StudentDataForm
           nextIssuePreview={nextIssuePreview}
           initialStudent={student}
+          showQrBanner={showQrBanner}
         />
       </div>
     </div>

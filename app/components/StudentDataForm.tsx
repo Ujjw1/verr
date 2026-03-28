@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import QRCode from "react-qr-code";
 import type { StudentEquivalency } from "@/lib/students";
 
@@ -9,11 +9,14 @@ type Props = {
   /** Shown for new records; final number is assigned on save. */
   nextIssuePreview: string;
   initialStudent: StudentEquivalency | null;
+  /** When true (URL `?qr=1`), keep the scan QR visible until dismissed. */
+  showQrBanner?: boolean;
 };
 
 export function StudentDataForm({
   nextIssuePreview,
   initialStudent,
+  showQrBanner = false,
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(initialStudent);
@@ -33,12 +36,16 @@ export function StudentDataForm({
   const [programDuration, setProgramDuration] = useState(
     () => initialStudent?.programDuration ?? ""
   );
-  const [status, setStatus] = useState<"idle" | "saving" | "error" | "saved">(
-    "idle"
-  );
+  const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  /** Full URL for the equivalency summary page (for QR + scan-to-open). */
-  const [summaryUrl, setSummaryUrl] = useState<string | null>(null);
+
+  const summaryUrlForQr = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    if (!showQrBanner || !initialStudent?.issueNo?.trim()) return null;
+    const url = new URL("/", window.location.origin);
+    url.searchParams.set("issue", initialStudent.issueNo.trim());
+    return url.toString();
+  }, [showQrBanner, initialStudent?.issueNo]);
 
   useEffect(() => {
     setStudentName(initialStudent?.studentName ?? "");
@@ -52,7 +59,6 @@ export function StudentDataForm({
     e.preventDefault();
     setStatus("saving");
     setErrorMessage(null);
-    setSummaryUrl(null);
     const body: Record<string, string> = {
       studentName,
       recognizedEquivalency,
@@ -78,15 +84,21 @@ export function StudentDataForm({
     }
     const data = (await res.json()) as StudentEquivalency;
     const issue = data.issueNo?.trim() ?? issueNo.trim();
-    if (typeof window !== "undefined" && issue) {
-      const url = new URL("/", window.location.origin);
-      url.searchParams.set("issue", issue);
-      setSummaryUrl(url.toString());
-    } else {
-      setSummaryUrl(null);
+    setStatus("idle");
+    if (issue) {
+      router.replace(
+        `/form?issue=${encodeURIComponent(issue)}&qr=1`
+      );
     }
-    setStatus("saved");
-    router.refresh();
+  }
+
+  function dismissQrBanner() {
+    const id = initialStudent?.issueNo?.trim();
+    if (id) {
+      router.replace(`/form?issue=${encodeURIComponent(id)}`);
+    } else {
+      router.replace("/form");
+    }
   }
 
   return (
@@ -196,22 +208,19 @@ export function StudentDataForm({
           {errorMessage}
         </p>
       ) : null}
-      {status === "saved" ? (
-        <p className="text-sm text-green-800">Saved.</p>
-      ) : null}
-
-      {status === "saved" && summaryUrl ? (
+      {summaryUrlForQr ? (
         <div className="rounded-lg border border-gray-200 bg-white p-3 text-center sm:p-4">
           <p className="text-sm font-medium text-gray-800">
             Scan to open this student&apos;s equivalency summary
           </p>
           <p className="mt-1 text-xs text-gray-600">
-            Opens the summary page on any phone or device with a camera.
+            Stays visible until you hide it. Opens the summary on any device with
+            a camera.
           </p>
           <div className="mt-4 flex justify-center bg-white p-2 sm:p-3">
             <div className="w-full max-w-[min(200px,100%)]">
               <QRCode
-                value={summaryUrl}
+                value={summaryUrlForQr}
                 size={256}
                 level="M"
                 className="h-auto w-full max-w-full"
@@ -219,16 +228,25 @@ export function StudentDataForm({
               />
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              const u = new URL(summaryUrl);
-              router.push(`${u.pathname}${u.search}${u.hash}`);
-            }}
-            className="mt-4 w-full rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 sm:w-auto"
-          >
-            Open equivalency summary
-          </button>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                const u = new URL(summaryUrlForQr);
+                router.push(`${u.pathname}${u.search}${u.hash}`);
+              }}
+              className="w-full rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 sm:w-auto"
+            >
+              Open equivalency summary
+            </button>
+            <button
+              type="button"
+              onClick={dismissQrBanner}
+              className="w-full rounded-md border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300 sm:w-auto"
+            >
+              Hide QR code
+            </button>
+          </div>
         </div>
       ) : null}
 
